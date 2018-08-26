@@ -1,0 +1,185 @@
+# _*_ encoding:utf-8 _*_
+
+
+import tensorflow as tf
+import tflearn.datasets.oxflower17 as oxflower17
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] ="3"
+
+
+#get data
+
+train_dataset_, train_labels_ = oxflower17.load_data(one_hot=True)
+train_dataset_ox17, train_labels_ox17 = train_dataset_[:1000,:,:,:], train_labels_[:1000,:]
+test_dataset_ox17, test_labels_ox17 = train_dataset_[1000:,:,:,:], train_labels_[1000:,:]
+
+
+
+print(test_labels_ox17)
+
+print('Training set', train_dataset_ox17.shape, train_labels_ox17.shape)
+print('Test set', test_dataset_ox17.shape, test_labels_ox17.shape)
+
+#基本的参数初始化,输入的 图片的大小是 None * 224 * 224 *3
+image = tf.placeholder(dtype=tf.float32,shape = [None, 224, 224, 3],name="Input")
+y = tf.placeholder(dtype=tf.float32,shape = [None, 17],name="Labels")
+drop_prob = tf.placeholder(dtype=tf.float32)
+#learning_rate = 0.00001
+batch_size = 32
+all_poach =50
+
+
+#build Net
+
+def max_pool_2X2(input):
+    return tf.nn.max_pool(input,ksize=[1, 2, 2, 1],strides=[1, 2, 2, 1],padding="SAME")
+
+def VggNet(images,prob):
+
+
+    #layer 1
+    with tf.name_scope("conv1") as scopes1:
+        W1_1 = tf.Variable(tf.truncated_normal(shape = [3, 3, 3, 64], stddev=1e-4, dtype=tf.float32))
+        b1 = tf.Variable(tf.constant(value =0.0, dtype=tf.float32, shape = [64]))
+        conv1_1 = tf.nn.conv2d(images,W1_1,strides=[1, 1, 1, 1],padding="SAME")
+        relu1_output = tf.nn.relu(tf.nn.bias_add(conv1_1,b1))    # activate first, pool next
+        W1_2 = tf.Variable(tf.truncated_normal(shape = [3, 3, 64, 64], stddev=1e-4, dtype=tf.float32))
+        b2 = tf.Variable(tf.constant(value =0.0, dtype=tf.float32, shape = [64]))
+        conv1_2 = tf.nn.conv2d(relu1_output,W1_2,strides=[1, 1, 1, 1],padding="SAME")
+        relu2_output = tf.nn.relu(tf.nn.bias_add(conv1_2,b2),)
+        lrn1 = tf.nn.lrn(relu2_output, 4,1.0, 0.001/9,0.75,"lrn1")
+        pool1 = max_pool_2X2(lrn1)
+
+    #layer 2
+    with tf.name_scope("conv2") as scopes2:
+        W2_1 = tf.Variable(tf.truncated_normal(shape = [3, 3, 64, 128], stddev=1e-4, dtype=tf.float32))
+        b2_1 = tf.Variable(tf.constant(value =0.0, dtype=tf.float32, shape = [128]))
+        W2_2 = tf.Variable(tf.truncated_normal(shape = [3, 3, 128, 128], stddev=1e-4, dtype=tf.float32))
+        b2_2 = tf.Variable(tf.constant(value =0.0, dtype=tf.float32, shape = [128]))
+        conv2_1 = tf.nn.conv2d(pool1,W2_1,strides=[1, 1, 1, 1],padding="SAME")
+        relu3_output = tf.nn.relu(tf.nn.bias_add(conv2_1,b2_1))
+        con2_2 = tf.nn.conv2d(relu3_output, W2_2,strides=[1, 1, 1, 1],padding="SAME")
+        relu4_output = tf.nn.relu(tf.nn.bias_add(con2_2, b2_2))
+        lrn2 = tf.nn.lrn(relu4_output, 4, 1.0, 0.001 / 9, 0.75, "lrn1")
+        pool2 = max_pool_2X2(lrn2)
+
+    #layer 3
+    with tf.name_scope("conv3") as scopes3:
+        W3_1 = tf.Variable(tf.truncated_normal(shape = [3, 3, 128, 256], stddev=1e-4, dtype=tf.float32))
+        b3_1 = tf.Variable(tf.constant(value =0.0, dtype=tf.float32, shape = [256]))
+        conv3_1 = tf.nn.conv2d(pool2, W3_1, strides=[1, 1, 1, 1], padding="SAME")
+        relu5_output = tf.nn.relu(tf.nn.bias_add(conv3_1, b3_1))
+        W3_2 = tf.Variable(tf.truncated_normal(shape = [3, 3, 256, 256], stddev=1e-4, dtype=tf.float32))
+        b3_2 = tf.Variable(tf.constant(value =0.0, dtype=tf.float32, shape = [256]))
+        con3_2 = tf.nn.conv2d(relu5_output, W3_2, strides=[1, 1, 1, 1], padding="SAME")
+        relu6_output = tf.nn.relu(tf.nn.bias_add(con3_2, b3_2))
+        W3_3 = tf.Variable(tf.truncated_normal(shape = [3, 3, 256, 256], stddev=1e-4, dtype=tf.float32))
+        b3_3 = tf.Variable(tf.constant(value =0.0, dtype=tf.float32, shape = [256]))
+        con3_3 = tf.nn.conv2d(relu6_output, W3_3, strides=[1, 1, 1, 1], padding="SAME")
+        relu7_output = tf.nn.relu(tf.nn.bias_add(con3_3, b3_3))
+        pool3 = max_pool_2X2(relu7_output)
+
+
+    with tf.name_scope("conv4") as scopes4:
+        W4_1 = tf.Variable(tf.truncated_normal(shape = [3, 3, 256, 512], stddev=1e-4, dtype=tf.float32))
+        b4_1 = tf.Variable(tf.constant(value =0.0, dtype=tf.float32, shape = [512]))
+        conv4_1 = tf.nn.conv2d(pool3, W4_1, strides=[1, 1, 1, 1], padding="SAME")
+        relu8_output = tf.nn.relu(tf.nn.bias_add(conv4_1, b4_1))
+        W4_2 = tf.Variable(tf.truncated_normal(shape = [3, 3, 512, 512], stddev=1e-4, dtype=tf.float32))
+        b4_2 = tf.Variable(tf.constant(value =0.0, dtype=tf.float32, shape = [512]))
+        con4_2 = tf.nn.conv2d(relu8_output, W4_2, strides=[1, 1, 1, 1], padding="SAME")
+        relu9_output = tf.nn.relu(tf.nn.bias_add(con4_2, b4_2))
+        W4_3 = tf.Variable(tf.truncated_normal(shape = [3, 3, 512, 512], stddev=1e-4, dtype=tf.float32))
+        b4_3 = tf.Variable(tf.constant(value =0.0, dtype=tf.float32, shape = [512]))
+        con4_3 = tf.nn.conv2d(relu9_output, W4_3, strides=[1, 1, 1, 1], padding="SAME")
+        relu10_output = tf.nn.relu(tf.nn.bias_add(con4_3, b4_3))
+        pool4 = max_pool_2X2(relu10_output)
+
+    with tf.name_scope("conv5") as scopes5:
+        W5_1 = tf.Variable(tf.truncated_normal(shape = [3, 3, 512, 512], stddev=1e-4, dtype=tf.float32))
+        b5_1 = tf.Variable(tf.constant(value =0.0, dtype=tf.float32, shape = [512]))
+        conv5_1 = tf.nn.conv2d(pool4, W5_1, strides=[1, 1, 1, 1], padding="SAME")
+        relu9_output = tf.nn.relu(tf.nn.bias_add(conv5_1, b5_1))
+        W5_2 = tf.Variable(tf.truncated_normal(shape = [3, 3, 512, 512], stddev=1e-4, dtype=tf.float32))
+        b5_2 = tf.Variable(tf.constant(value =0.0, dtype=tf.float32, shape = [512]))
+        con5_2 = tf.nn.conv2d(relu9_output, W5_2, strides=[1, 1, 1, 1], padding="SAME")
+        relu11_output = tf.nn.relu(tf.nn.bias_add(con5_2, b5_2))
+        W5_3 = tf.Variable(tf.truncated_normal(shape = [3, 3, 512, 512], stddev=1e-4, dtype=tf.float32))
+        b5_3 = tf.Variable(tf.constant(value =0.0, dtype=tf.float32, shape = [512]))
+        con5_3 = tf.nn.conv2d(relu11_output, W5_3, strides=[1, 1, 1, 1], padding="SAME")
+        relu12_output = tf.nn.relu(tf.nn.bias_add(con5_3, b5_3))
+        pool5 = max_pool_2X2(relu12_output)
+
+    with tf.name_scope("fc1") as scopes6:
+        #shp = pool5.get_shape()   #得到pool5的各维数
+        #flattened_shape =shp[1].value *shp[2].value *shp[3].value
+        n_in = tf.reshape(pool5,[-1, 7*7*512])
+        fc_w1 = tf.Variable(tf.truncated_normal([7*7*512, 4096],stddev=1e-1,dtype=tf.float32))
+        #fc_w1 =tf.Variable(tf.random_normal())
+        #bia1 = biases([4096])
+        bia1 = tf.Variable(tf.constant(1.0,dtype=tf.float32,shape=[4096]))
+        fc1 = tf.nn.relu(tf.matmul(n_in,fc_w1) +bia1)
+        fc_drop1 = tf.nn.dropout(fc1,keep_prob=prob)
+
+    with tf.name_scope("fc2") as scopes7:
+        fc_w2 = tf.Variable(tf.truncated_normal([4096, 4096], stddev=1e-1, dtype=tf.float32))
+        #fc_w2 = weights([4096, 4096])
+        #fc_w2 =tf.V
+        bia2 = tf.Variable(tf.constant(1.0, dtype=tf.float32, shape=[4096]))
+        fc2 = tf.nn.relu(tf.matmul(fc_drop1, fc_w2) + bia2)
+        fc_drop2 = tf.nn.dropout(fc2, keep_prob=prob)
+
+    with tf.name_scope("fc3") as scopes8:
+        #fc_w3 = weights([4096, 17])
+        fc_w3 = tf.Variable(tf.truncated_normal([4096, 17], stddev=1e-1, dtype=tf.float32))
+        #bia3 = biases([17])
+        bia3 = tf.Variable(tf.constant(1.0, dtype=tf.float32, shape=[17]))
+        fc3 = tf.nn.softmax(tf.nn.relu(tf.matmul(fc_drop2, fc_w3) + bia3))
+
+    return fc3
+
+# Define cost (cross_entrory)
+fc = VggNet(image,drop_prob)
+cost = tf.reduce_mean(tf.reduce_sum(-y*tf.log(fc),reduction_indices=[1]))
+optimizer = tf.train.AdamOptimizer(0.001).minimize(cost)
+
+#  prediction
+
+pred = tf.equal(tf.argmax(y,1),tf.argmax(fc,1))
+pred_p = tf.reduce_mean(tf.cast(pred,tf.float32))
+
+init = tf.global_variables_initializer()
+
+#  train oue Net
+
+if __name__ =="__main__":
+    with tf.Session() as sess:
+        sess.run(init)
+        num_batch = int(train_dataset_ox17.shape[0] / batch_size)
+        print(num_batch)
+        for epoch  in range(all_poach):
+
+            ave_cost =0
+
+            for i in range(num_batch):
+                start = (i * batch_size )%train_dataset_ox17.shape[0]
+                end = min(start + batch_size, train_dataset_ox17.shape[0])
+
+                each_cost,_ = sess.run([cost, optimizer],feed_dict={image:train_dataset_ox17[start:end],y:train_labels_ox17[start:end],drop_prob:0.75})
+                ave_cost += each_cost / num_batch
+            if (epoch +1)%1 ==0:
+                print("epoch %04d"%(epoch+1)," ","cost :{:.5f}".format(ave_cost))
+
+        print("Training Down !")
+        num1 = int (test_dataset_ox17.shape[0] / batch_size)
+        ave_prediction=0
+        for i in range(num1):
+            start = (i*batch_size)%(test_dataset_ox17.shape[0])
+            end = min(start +batch_size,test_dataset_ox17.shape[0] )
+
+            pre = sess.run(pred_p,feed_dict={image:test_dataset_ox17[start:end],y:test_labels_ox17[start:end],drop_prob:1})
+
+            ave_prediction+=pre /num1
+        print("Accuracy = {:.5f}" .format(ave_prediction))
+
+
