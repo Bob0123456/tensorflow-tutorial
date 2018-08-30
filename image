@@ -1,0 +1,33 @@
+#_*_encoding=utf-8_*_
+"""
+It's for image getted.
+
+"""
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import os
+def file_name2(file_dir):   #特定类型的文件
+    L=[]
+    for root, dirs, files in os.walk(file_dir):
+        for file in files:
+            if os.path.splitext(file)[1] == '.jpg':
+                L.append(os.path.join(root, file))
+    return L
+
+path = file_name2('E:\微信\WeChat Files')
+print(path)
+file_queue = tf.train.string_input_producer(path, shuffle=True, num_epochs=4) #创建输入队列
+image_reader = tf.WholeFileReader()
+key, image = image_reader.read(file_queue)
+image = tf.image.decode_jpeg(image)
+
+with tf.Session() as sess:
+   
+    tf.local_variables_initializer().run()
+  
+    threads = tf.train.start_queue_runners(sess=sess)
+
+    print (type(image))
+    print (type(image.eval()))
+    print(image.eval().shape)
+
